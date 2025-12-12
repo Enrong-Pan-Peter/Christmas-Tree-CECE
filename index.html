@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Interactive Christmas Experience</title>
     <style>
         body {
@@ -10,6 +10,10 @@
             overflow: hidden;
             background-color: #000000;
             font-family: 'Courier New', Courier, monospace;
+            /* Prevent selecting text on double tap */
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* Disables browser handling of gestures */
         }
 
         #ui {
@@ -38,6 +42,8 @@
             text-transform: uppercase;
             opacity: 1;
             transition: opacity 0.5s;
+            text-align: center;
+            width: 100%;
         }
 
         #photo-gallery {
@@ -77,14 +83,28 @@
             left: 0;
             z-index: 10;
         }
+        
+        /* Mobile adjustment for gallery */
+        @media (max-width: 768px) {
+            #photo-gallery img {
+                max-width: 25%; /* Larger images on phone */
+                max-height: 15vh;
+            }
+            #ui {
+                font-size: 14px;
+            }
+            #start-instruction {
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
 <body>
 
     <div id="ui">Interactive Christmas Tree</div>
-    <div id="start-instruction">Click to Start</div>
+    <div id="start-instruction">Tap to Start</div>
     
-    <audio id="bgm" loop>
+    <audio id="bgm" loop playsinline>
         <source src="bgm.m4a" type="audio/mp4">
     </audio>
 
@@ -102,12 +122,13 @@
         import * as THREE from 'three';
 
         // --- Configuration ---
-        const PARTICLE_COUNT = 55000; // Increased even more for density
-        const PARTICLE_SIZE = 0.25;   // Slightly larger base size
+        // Slightly reduced count for mobile performance stability, still very bright
+        const PARTICLE_COUNT = 45000; 
+        const PARTICLE_SIZE = 0.25;   
         const LERP_SPEED = 0.05; 
 
-        // Colors - Overdrive values for Glow
-        const C_PINE_GREEN = { r: 0.2, g: 1.8, b: 0.5 }; // >1.0 for neon glow
+        // Colors
+        const C_PINE_GREEN = { r: 0.2, g: 1.8, b: 0.5 }; 
         const C_BAMBOO_YELLOW = new THREE.Color(0xffd700); 
         const C_ORANGE = new THREE.Color(0xff9a00);
         const C_DREAMY_YELLOW = new THREE.Color(0xfff8db); 
@@ -118,14 +139,14 @@
 
         // --- Scene Setup ---
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.005); // Very light fog
+        scene.fog = new THREE.FogExp2(0x000000, 0.005);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 60;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for mobile performance
         renderer.setClearColor(0x000000, 0); 
         document.body.appendChild(renderer.domElement);
 
@@ -168,7 +189,6 @@
         scene.add(particles);
 
         // --- Shape Generators ---
-
         function setTargetSmashed() {
             material.size = PARTICLE_SIZE;
             for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -189,9 +209,7 @@
 
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 let x, y, z, r, g, b;
-
                 if (i < ribbonCount) {
-                    // RIBBON
                     const t = (i / ribbonCount) * Math.PI * 2; 
                     y = half + 0.5; 
                     if (i % 2 === 0) {
@@ -207,12 +225,9 @@
                         z = Math.cos(tumble) * 2;
                         y = half - (tumble * 4) + 1; 
                     }
-                    x += (Math.random()-0.5)*0.5;
-                    z += (Math.random()-0.5)*0.5;
-                    y += (Math.random()-0.5)*0.5;
+                    x += (Math.random()-0.5)*0.5; z += (Math.random()-0.5)*0.5; y += (Math.random()-0.5)*0.5;
                     r = C_BAMBOO_YELLOW.r; g = C_BAMBOO_YELLOW.g; b = C_BAMBOO_YELLOW.b;
                 } else {
-                    // BOX
                     const isEdge = Math.random() > 0.92; 
                     if (isEdge) {
                         const axis = Math.floor(Math.random() * 3);
@@ -236,44 +251,35 @@
         }
 
         function setTargetTree() {
-            // Trick: Increase particle size specifically for the tree to make it brighter/fuller
             material.size = PARTICLE_SIZE * 1.5; 
-
             const treeHeight = 45; 
             const treeBaseY = -22;
-            const bgThreshold = 0.95; // 5% background particles
+            const bgThreshold = 0.95; 
 
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 let x, y, z, r, g, b;
                 const p = Math.random();
 
                 if (p > bgThreshold) {
-                    // BACKGROUND VIBE
                     x = (Math.random() - 0.5) * 350;
                     y = (Math.random() - 0.5) * 350;
                     z = (Math.random() - 0.5) * 150 - 50; 
-
                     const colorPick = Math.random();
                     if (colorPick < 0.33) { r=C_PLUM_RED.r; g=C_PLUM_RED.g; b=C_PLUM_RED.b; }
                     else if (colorPick < 0.66) { r=C_ORANGE.r; g=C_ORANGE.g; b=C_ORANGE.b; }
                     else { r=C_BAMBOO_YELLOW.r; g=C_BAMBOO_YELLOW.g; b=C_BAMBOO_YELLOW.b; }
-                    r*=0.7; g*=0.7; b*=0.7; // Dimmer background
-
+                    r*=0.7; g*=0.7; b*=0.7; 
                 } else {
                     const p_tree = p / bgThreshold;
-
                     if (p_tree > 0.985) {
-                        // STAR - Super bright
                         const radius = Math.random() * 1.5;
                         const theta = Math.random() * Math.PI * 2;
                         const phi = Math.random() * Math.PI;
                         x = radius * Math.sin(phi) * Math.cos(theta);
                         y = radius * Math.sin(phi) * Math.sin(theta) + (treeBaseY + treeHeight);
                         z = radius * Math.cos(phi);
-                        r = 2.0; g = 1.8; b = 0.4; // >1.0 for bloom
-                    } 
-                    else if (p_tree > 0.91) {
-                        // HELIX
+                        r = 2.0; g = 1.8; b = 0.4; 
+                    } else if (p_tree > 0.91) {
                         const h_norm = Math.random();
                         const h = h_norm * treeHeight;
                         const currentY = treeBaseY + h;
@@ -282,43 +288,32 @@
                         x = Math.cos(angle) * (maxRadius + 0.5);
                         z = Math.sin(angle) * (maxRadius + 0.5);
                         y = currentY;
-                        if (Math.random() > 0.7) { r=2.0; g=0.2; b=0.2; } // Bright Red
-                        else { r=2.0; g=1.8; b=0.0; } // Bright Gold
+                        if (Math.random() > 0.7) { r=2.0; g=0.2; b=0.2; } 
+                        else { r=2.0; g=1.8; b=0.0; } 
                     } else {
-                        // BODY - Super Bright Green Overdrive
                         const h = Math.random() * treeHeight;
                         const currentY = treeBaseY + h;
                         const h_norm = h / treeHeight;
                         const maxRadius = (1 - h_norm) * 14; 
-                        
-                        // Push more particles to the surface for visibility
-                        // Using sqrt(random) * maxRadius pushes them outward
                         const radius = Math.sqrt(Math.random()) * maxRadius;
                         const angle = Math.random() * Math.PI * 2;
                         x = Math.cos(angle) * radius;
                         z = Math.sin(angle) * radius;
                         y = currentY;
-                        
                         const shade = 0.5 + Math.random() * 0.5;
-                        // Use the overdrive green color
-                        r = C_PINE_GREEN.r * shade; 
-                        g = C_PINE_GREEN.g * shade; 
-                        b = C_PINE_GREEN.b * shade;
+                        r = C_PINE_GREEN.r * shade; g = C_PINE_GREEN.g * shade; b = C_PINE_GREEN.b * shade;
                     }
                 }
-
                 targetPositions[i * 3] = x; targetPositions[i * 3 + 1] = y; targetPositions[i * 3 + 2] = z;
                 targetColors[i * 3] = r; targetColors[i * 3 + 1] = g; targetColors[i * 3 + 2] = b;
             }
         }
 
         function setTargetText(textString, fontSize, mode) {
-            material.size = PARTICLE_SIZE * 1.2; // Slightly larger for text readability
-            
+            material.size = PARTICLE_SIZE * 1.2; 
             const canvas2d = document.createElement('canvas');
             const ctx = canvas2d.getContext('2d');
             canvas2d.width = 1400; 
-            // FIXED: Huge height to prevent cutting off bottom of letters
             canvas2d.height = 800; 
             
             ctx.font = `900 ${fontSize}px Arial Black, sans-serif`; 
@@ -331,7 +326,6 @@
             const data = imageData.data;
             const validPixels = [];
 
-            // Scan EVERY pixel row to ensure no gaps
             for (let y = 0; y < canvas2d.height; y += 2) { 
                 for (let x = 0; x < canvas2d.width; x += 2) { 
                     if (data[(y * canvas2d.width + x) * 4 + 3] > 128) {
@@ -366,14 +360,14 @@
             }
         }
 
-        // --- Interaction ---
+        // --- Interaction Logic (Fixed for Mobile) ---
         function updateState() {
             const instruction = document.getElementById('start-instruction');
-
             if (currentState === 0) {
                 setTargetSmashed();
                 gallery.style.opacity = 0;
                 instruction.style.opacity = 1;
+                instruction.innerText = "Tap to Start";
                 camera.position.z = 80;
             } else if (currentState === 1) {
                 setTargetBox();
@@ -395,15 +389,32 @@
             }
         }
 
-        window.addEventListener('click', () => {
-            if (currentState === 0) {
-                const audio = document.getElementById('bgm');
-                audio.play().catch(e => console.log("Audio play error", e));
+        // UNIFIED INTERACTION HANDLER
+        function onUserInteraction(event) {
+            // Prevent double firing on devices that trigger both touch and click
+            if (event.type === 'touchstart') {
+                event.preventDefault(); // Stop mouse emulation
             }
+
+            // Audio Unlock for Mobile
+            const audio = document.getElementById('bgm');
+            if (audio.paused) {
+                audio.play().then(() => {
+                    // Audio started
+                }).catch(e => {
+                    console.log("Audio waiting for interaction");
+                });
+            }
+
             currentState++;
-            if (currentState > 4) currentState = 1; 
+            if (currentState > 4) currentState = 1; // Loop back to box
             updateState();
-        });
+        }
+
+        // Listen for BOTH click and touch
+        window.addEventListener('click', onUserInteraction);
+        // Passive: false is required to use preventDefault()
+        window.addEventListener('touchstart', onUserInteraction, { passive: false });
 
         updateState();
 
