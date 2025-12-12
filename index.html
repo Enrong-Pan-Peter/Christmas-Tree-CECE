@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Christmas Experience</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 18px;
+            z-index: 20;
+            pointer-events: none;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        #start-instruction {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            z-index: 30;
+            pointer-events: none;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            opacity: 1;
+            transition: opacity 0.5s;
+        }
+
+        #photo-gallery {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-content: center;
+            gap: 15px;
+            padding: 50px;
+            box-sizing: border-box;
+            opacity: 0;
+            transition: opacity 3s ease-in-out;
+            z-index: 1; 
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(30,30,30,0.8) 0%, rgba(0,0,0,1) 100%);
+        }
+
+        #photo-gallery img {
+            max-width: 15%;
+            max-height: 20vh;
+            object-fit: cover;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+            opacity: 0.7; 
+            filter: grayscale(0%);
+            transition: all 1s;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Interactive Christmas Tree</div>
+    <div id="start-instruction">Click to Start</div>
+    
+    <audio id="bgm" loop>
+        <source src="bgm.m4a" type="audio/mp4">
+    </audio>
+
+    <div id="photo-gallery"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Configuration ---
+        const PARTICLE_COUNT = 55000; // Increased even more for density
+        const PARTICLE_SIZE = 0.25;   // Slightly larger base size
+        const LERP_SPEED = 0.05; 
+
+        // Colors - Overdrive values for Glow
+        const C_PINE_GREEN = { r: 0.2, g: 1.8, b: 0.5 }; // >1.0 for neon glow
+        const C_BAMBOO_YELLOW = new THREE.Color(0xffd700); 
+        const C_ORANGE = new THREE.Color(0xff9a00);
+        const C_DREAMY_YELLOW = new THREE.Color(0xfff8db); 
+        const C_PLUM_RED = new THREE.Color(0xff3030);      
+        const C_WHITE = new THREE.Color(0xffffff);
+
+        let currentState = 0; 
+
+        // --- Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.005); // Very light fog
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 60;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setClearColor(0x000000, 0); 
+        document.body.appendChild(renderer.domElement);
+
+        // Load Photos
+        const gallery = document.getElementById('photo-gallery');
+        for(let i = 1; i <= 20; i++) {
+            const img = document.createElement('img');
+            img.src = `photos/${i}.jpg`; 
+            img.onerror = function() { this.style.display = 'none'; }; 
+            gallery.appendChild(img);
+        }
+
+        // --- Particles Init ---
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const colors = new Float32Array(PARTICLE_COUNT * 3);
+        const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
+        const targetColors = new Float32Array(PARTICLE_COUNT * 3);
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            positions[i * 3] = (Math.random() - 0.5) * 300;
+            positions[i * 3 + 1] = (Math.random() - 0.5) * 300;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 300;
+            colors[i * 3] = 1; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 1;
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const sprite = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/spark1.png');
+        const material = new THREE.PointsMaterial({
+            size: PARTICLE_SIZE,
+            vertexColors: true,
+            map: sprite,
+            transparent: true,
+            opacity: 1.0, 
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // --- Shape Generators ---
+
+        function setTargetSmashed() {
+            material.size = PARTICLE_SIZE;
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                targetPositions[i * 3] = (Math.random() - 0.5) * 400;
+                targetPositions[i * 3 + 1] = (Math.random() - 0.5) * 400;
+                targetPositions[i * 3 + 2] = (Math.random() - 0.5) * 400;
+                targetColors[i * 3] = Math.random();
+                targetColors[i * 3 + 1] = Math.random();
+                targetColors[i * 3 + 2] = Math.random();
+            }
+        }
+
+        function setTargetBox() {
+            material.size = PARTICLE_SIZE;
+            const size = 12;
+            const half = size / 2;
+            const ribbonCount = Math.floor(PARTICLE_COUNT * 0.25); 
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                let x, y, z, r, g, b;
+
+                if (i < ribbonCount) {
+                    // RIBBON
+                    const t = (i / ribbonCount) * Math.PI * 2; 
+                    y = half + 0.5; 
+                    if (i % 2 === 0) {
+                        const scale = 5;
+                        x = scale * Math.sin(t) * Math.cos(t*0.5);
+                        z = scale * Math.sin(t) * Math.sin(t*0.5);
+                        y += Math.abs(Math.sin(t*3)) * 1.5; 
+                    } else {
+                        const scale = 7;
+                        const side = (i % 4 < 2) ? 1 : -1; 
+                        const tumble = (i / ribbonCount) * Math.PI; 
+                        x = side * (Math.sin(tumble) * scale * 0.2 + (scale*0.8)); 
+                        z = Math.cos(tumble) * 2;
+                        y = half - (tumble * 4) + 1; 
+                    }
+                    x += (Math.random()-0.5)*0.5;
+                    z += (Math.random()-0.5)*0.5;
+                    y += (Math.random()-0.5)*0.5;
+                    r = C_BAMBOO_YELLOW.r; g = C_BAMBOO_YELLOW.g; b = C_BAMBOO_YELLOW.b;
+                } else {
+                    // BOX
+                    const isEdge = Math.random() > 0.92; 
+                    if (isEdge) {
+                        const axis = Math.floor(Math.random() * 3);
+                        const d1 = (Math.random() - 0.5) * size;
+                        const d2 = (Math.random() > 0.5 ? 1 : -1) * half;
+                        const d3 = (Math.random() > 0.5 ? 1 : -1) * half;
+                        if (axis === 0) { x=d1; y=d2; z=d3; }
+                        else if (axis === 1) { x=d2; y=d1; z=d3; }
+                        else { x=d2; y=d3; z=d1; }
+                        r = C_BAMBOO_YELLOW.r + 0.2; g = C_BAMBOO_YELLOW.g + 0.2; b = C_BAMBOO_YELLOW.b;
+                    } else {
+                        x = (Math.random() - 0.5) * size * 0.98;
+                        y = (Math.random() - 0.5) * size * 0.98;
+                        z = (Math.random() - 0.5) * size * 0.98;
+                        r = C_PINE_GREEN.r; g = C_PINE_GREEN.g; b = C_PINE_GREEN.b;
+                    }
+                }
+                targetPositions[i * 3] = x; targetPositions[i * 3 + 1] = y; targetPositions[i * 3 + 2] = z;
+                targetColors[i * 3] = r; targetColors[i * 3 + 1] = g; targetColors[i * 3 + 2] = b;
+            }
+        }
+
+        function setTargetTree() {
+            // Trick: Increase particle size specifically for the tree to make it brighter/fuller
+            material.size = PARTICLE_SIZE * 1.5; 
+
+            const treeHeight = 45; 
+            const treeBaseY = -22;
+            const bgThreshold = 0.95; // 5% background particles
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                let x, y, z, r, g, b;
+                const p = Math.random();
+
+                if (p > bgThreshold) {
+                    // BACKGROUND VIBE
+                    x = (Math.random() - 0.5) * 350;
+                    y = (Math.random() - 0.5) * 350;
+                    z = (Math.random() - 0.5) * 150 - 50; 
+
+                    const colorPick = Math.random();
+                    if (colorPick < 0.33) { r=C_PLUM_RED.r; g=C_PLUM_RED.g; b=C_PLUM_RED.b; }
+                    else if (colorPick < 0.66) { r=C_ORANGE.r; g=C_ORANGE.g; b=C_ORANGE.b; }
+                    else { r=C_BAMBOO_YELLOW.r; g=C_BAMBOO_YELLOW.g; b=C_BAMBOO_YELLOW.b; }
+                    r*=0.7; g*=0.7; b*=0.7; // Dimmer background
+
+                } else {
+                    const p_tree = p / bgThreshold;
+
+                    if (p_tree > 0.985) {
+                        // STAR - Super bright
+                        const radius = Math.random() * 1.5;
+                        const theta = Math.random() * Math.PI * 2;
+                        const phi = Math.random() * Math.PI;
+                        x = radius * Math.sin(phi) * Math.cos(theta);
+                        y = radius * Math.sin(phi) * Math.sin(theta) + (treeBaseY + treeHeight);
+                        z = radius * Math.cos(phi);
+                        r = 2.0; g = 1.8; b = 0.4; // >1.0 for bloom
+                    } 
+                    else if (p_tree > 0.91) {
+                        // HELIX
+                        const h_norm = Math.random();
+                        const h = h_norm * treeHeight;
+                        const currentY = treeBaseY + h;
+                        const maxRadius = (1 - h_norm) * 15; 
+                        const angle = h * 0.5; 
+                        x = Math.cos(angle) * (maxRadius + 0.5);
+                        z = Math.sin(angle) * (maxRadius + 0.5);
+                        y = currentY;
+                        if (Math.random() > 0.7) { r=2.0; g=0.2; b=0.2; } // Bright Red
+                        else { r=2.0; g=1.8; b=0.0; } // Bright Gold
+                    } else {
+                        // BODY - Super Bright Green Overdrive
+                        const h = Math.random() * treeHeight;
+                        const currentY = treeBaseY + h;
+                        const h_norm = h / treeHeight;
+                        const maxRadius = (1 - h_norm) * 14; 
+                        
+                        // Push more particles to the surface for visibility
+                        // Using sqrt(random) * maxRadius pushes them outward
+                        const radius = Math.sqrt(Math.random()) * maxRadius;
+                        const angle = Math.random() * Math.PI * 2;
+                        x = Math.cos(angle) * radius;
+                        z = Math.sin(angle) * radius;
+                        y = currentY;
+                        
+                        const shade = 0.5 + Math.random() * 0.5;
+                        // Use the overdrive green color
+                        r = C_PINE_GREEN.r * shade; 
+                        g = C_PINE_GREEN.g * shade; 
+                        b = C_PINE_GREEN.b * shade;
+                    }
+                }
+
+                targetPositions[i * 3] = x; targetPositions[i * 3 + 1] = y; targetPositions[i * 3 + 2] = z;
+                targetColors[i * 3] = r; targetColors[i * 3 + 1] = g; targetColors[i * 3 + 2] = b;
+            }
+        }
+
+        function setTargetText(textString, fontSize, mode) {
+            material.size = PARTICLE_SIZE * 1.2; // Slightly larger for text readability
+            
+            const canvas2d = document.createElement('canvas');
+            const ctx = canvas2d.getContext('2d');
+            canvas2d.width = 1400; 
+            // FIXED: Huge height to prevent cutting off bottom of letters
+            canvas2d.height = 800; 
+            
+            ctx.font = `900 ${fontSize}px Arial Black, sans-serif`; 
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textString, canvas2d.width / 2, canvas2d.height / 2);
+
+            const imageData = ctx.getImageData(0, 0, canvas2d.width, canvas2d.height);
+            const data = imageData.data;
+            const validPixels = [];
+
+            // Scan EVERY pixel row to ensure no gaps
+            for (let y = 0; y < canvas2d.height; y += 2) { 
+                for (let x = 0; x < canvas2d.width; x += 2) { 
+                    if (data[(y * canvas2d.width + x) * 4 + 3] > 128) {
+                        validPixels.push({
+                            x: (x - canvas2d.width / 2) * 0.08, 
+                            y: -(y - canvas2d.height / 2) * 0.08,
+                            origX: x 
+                        });
+                    }
+                }
+            }
+
+            if (validPixels.length === 0) return;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const pixelIndex = i % validPixels.length;
+                const p = validPixels[pixelIndex];
+                const z = (Math.random() - 0.5) * 0.5; 
+                let r, g, b;
+                if (mode === 'rainbow') {
+                    const normalizedX = p.origX / canvas2d.width;
+                    const hue = (normalizedX + 0.1) % 1.0; 
+                    const tempColor = new THREE.Color().setHSL(hue, 0.9, 0.6); 
+                    r = tempColor.r; g = tempColor.g; b = tempColor.b;
+                } else if (mode === 'dreamy') {
+                    r = C_DREAMY_YELLOW.r * 1.5; 
+                    g = C_DREAMY_YELLOW.g * 1.5;
+                    b = C_DREAMY_YELLOW.b * 1.5;
+                } else { r=1; g=1; b=1; }
+                targetPositions[i * 3] = p.x; targetPositions[i * 3 + 1] = p.y; targetPositions[i * 3 + 2] = z;
+                targetColors[i * 3] = r; targetColors[i * 3 + 1] = g; targetColors[i * 3 + 2] = b;
+            }
+        }
+
+        // --- Interaction ---
+        function updateState() {
+            const instruction = document.getElementById('start-instruction');
+
+            if (currentState === 0) {
+                setTargetSmashed();
+                gallery.style.opacity = 0;
+                instruction.style.opacity = 1;
+                camera.position.z = 80;
+            } else if (currentState === 1) {
+                setTargetBox();
+                gallery.style.opacity = 0;
+                instruction.style.opacity = 0;
+                camera.position.z = 50;
+            } else if (currentState === 2) {
+                setTargetTree();
+                gallery.style.opacity = 0;
+                 camera.position.z = 60; 
+            } else if (currentState === 3) {
+                setTargetText("Edinburgh", 150, 'rainbow');
+                gallery.style.opacity = 0;
+                camera.position.z = 40; 
+            } else if (currentState === 4) {
+                setTargetText("CECE ❤", 180, 'dreamy');
+                gallery.style.opacity = 1; 
+                camera.position.z = 45;
+            }
+        }
+
+        window.addEventListener('click', () => {
+            if (currentState === 0) {
+                const audio = document.getElementById('bgm');
+                audio.play().catch(e => console.log("Audio play error", e));
+            }
+            currentState++;
+            if (currentState > 4) currentState = 1; 
+            updateState();
+        });
+
+        updateState();
+
+        // --- Animate ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const pa = geometry.attributes.position.array;
+            const ca = geometry.attributes.color.array;
+            for (let i = 0; i < PARTICLE_COUNT * 3; i++) {
+                pa[i] += (targetPositions[i] - pa[i]) * LERP_SPEED;
+                ca[i] += (targetColors[i] - ca[i]) * LERP_SPEED;
+            }
+            geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
+
+            if (currentState === 0) particles.rotation.y += 0.005;
+            else if (currentState === 1) particles.rotation.y += 0.01; 
+            else if (currentState === 2) particles.rotation.y += 0.003;
+            else particles.rotation.y = 0; 
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+
+    </script>
+</body>
+</html>
